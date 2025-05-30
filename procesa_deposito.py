@@ -60,7 +60,7 @@ if uploaded_file is not None:
                 label="📥 Descargar resumen en Excel",
                 data=excel_bytes,
                 file_name="resumen_depositos.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime="application/octet-stream"
             )
 
     except Exception as e:
