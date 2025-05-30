@@ -3,65 +3,65 @@ import pandas as pd
 import numpy as np
 from io import BytesIO
 
-st.title("Análisis de Depósitos por Usuario")
+st.set_page_config(page_title="Resumen de Depósitos", layout="centered")
 
-# Subir archivo
-uploaded_file = st.file_uploader("Subí un archivo CSV con los depósitos", type=["csv"])
+st.title("💸 Resumen de Depósitos por Usuario")
+
+uploaded_file = st.file_uploader("Subí un archivo Excel", type=["xlsx"])
 
 if uploaded_file is not None:
     try:
-        # Leer archivo CSV
-        df = pd.read_csv(uploaded_file, sep=';')
+        df = pd.read_excel(uploaded_file)
 
-        # Normalizar nombre de columna de usuario
-        usuario_col = next((col for col in df.columns if col.strip().lower() == 'usuario'), None)
-        fecha_col = next((col for col in df.columns if 'fecha' in col.lower()), None)
-        monto_col = next((col for col in df.columns if 'monto' in col.lower() or 'deposito' in col.lower()), None)
-
-        if not usuario_col or not fecha_col or not monto_col:
-            st.error("No se encontraron columnas requeridas: usuario, fecha y monto.")
+        # Buscar columna 'usuario'
+        usuario_col = next((col for col in df.columns if 'usuario' in col.lower()), None)
+        if not usuario_col:
+            st.error("❌ No se encontró una columna con el nombre 'usuario'.")
         else:
-            # Convertir tipos
-            df[fecha_col] = pd.to_datetime(df[fecha_col], errors='coerce')
-            df[monto_col] = pd.to_numeric(df[monto_col], errors='coerce')
+            # Buscar columna de fecha/hora
+            fecha_col = next((col for col in df.columns if 'fecha' in col.lower()), None)
+            if not fecha_col:
+                st.error("❌ No se encontró una columna con la fecha del depósito.")
+            else:
+                # Buscar columna de monto
+                monto_col = next((col for col in df.columns if 'monto' in col.lower() or 'importe' in col.lower()), None)
+                if not monto_col:
+                    st.error("❌ No se encontró una columna con el monto del depósito.")
+                else:
+                    df[fecha_col] = pd.to_datetime(df[fecha_col], errors='coerce')
+                    df[monto_col] = pd.to_numeric(df[monto_col], errors='coerce')
+                    df = df.dropna(subset=[usuario_col, fecha_col, monto_col])
 
-            # Eliminar nulos
-            df = df.dropna(subset=[fecha_col, monto_col])
+                    # Sumar, máximo, mínimo, y máximo en franja horaria
+                    resumen = df.groupby(usuario_col).agg(
+                        suma_total_depositos=(monto_col, 'sum'),
+                        deposito_maximo=(monto_col, 'max'),
+                        deposito_minimo=(monto_col, 'min')
+                    ).reset_index()
 
-            # Extraer hora
-            df["hora"] = df[fecha_col].dt.hour
+                    # Extraer hora
+                    df['hora'] = df[fecha_col].dt.hour
+                    en_franja = df[(df['hora'] >= 17) & (df['hora'] <= 23)]
 
-            # Crear resumen
-            resumen = df.groupby(usuario_col).agg(
-                total_depositado=(monto_col, 'sum'),
-                max_deposito=(monto_col, 'max'),
-                min_deposito=(monto_col, 'min')
-            ).reset_index()
+                    max_17a23 = en_franja.groupby(usuario_col)[monto_col].max().reset_index()
+                    max_17a23.rename(columns={monto_col: 'max_deposito_17_23hs'}, inplace=True)
 
-            # Filtrar entre 17 y 23 hs
-            df_17_23 = df[(df["hora"] >= 17) & (df["hora"] <= 23)]
-            max_17_23 = df_17_23.groupby(usuario_col)[monto_col].max().reset_index().rename(columns={monto_col: "max_deposito_17_a_23"})
+                    resumen = resumen.merge(max_17a23, on=usuario_col, how='left')
 
-            # Unir todo
-            resumen = pd.merge(resumen, max_17_23, on=usuario_col, how="left")
+                    st.subheader("📊 Resumen generado")
+                    st.dataframe(resumen)
 
-            st.subheader("Resumen de depósitos por usuario")
-            st.dataframe(resumen)
+                    # Guardar Excel
+                    output = BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        resumen.to_excel(writer, sheet_name="Resumen", index=False)
+                    output.seek(0)
 
-            # Descargar Excel
-            def to_excel_bytes(df):
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Resumen')
-                return output.getvalue()
-
-            excel_bytes = to_excel_bytes(resumen)
-            st.download_button(
-                label="📥 Descargar resumen en Excel",
-                data=excel_bytes,
-                file_name="resumen_depositos.xlsx",
-                mime="application/octet-stream"
-            )
-
+                    st.download_button(
+                        label="📥 Descargar Excel",
+                        data=output,
+                        file_name="resumen_depositos.xlsx",
+                        mime="application/octet-stream"
+                    )
     except Exception as e:
-        st.error(f"Ocurrió un error al procesar el archivo: {e}")
+        st.error(f"⚠️ Ocurrió un error al procesar el archivo: {e}")
