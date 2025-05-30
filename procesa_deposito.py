@@ -7,7 +7,7 @@ st.set_page_config(page_title="Resumen de Depósitos", layout="centered")
 
 st.title("💸 Resumen de Depósitos por Usuario")
 
-uploaded_file = st.file_uploader("Subí un archivo Excel", type=["xlsx"])
+uploaded_file = st.file_uploader("Subí un archivo Excel")  # sin el filtro de tipo
 
 if uploaded_file is not None:
     try:
